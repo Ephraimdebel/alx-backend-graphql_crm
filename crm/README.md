@@ -1,139 +1,139 @@
-# CRM Project Setup and Celery Tasks
+# CRM Project - Background Tasks and Reporting
 
-This document explains how to set up the CRM project, run cron jobs, and configure Celery tasks for generating weekly reports.
+This project demonstrates the integration of background tasks, cron jobs, and GraphQL queries/mutations in a Django CRM application. It includes customer cleanup, order reminders, stock updates, and weekly CRM report generation using Celery.
 
----
+## Requirements
 
-## 1. Install Dependencies
+* Python 3.12+
+* Django
+* django-crontab
+* celery
+* django-celery-beat
+* gql
+* Redis (for Celery broker)
+* GraphQL endpoint ([http://localhost:8000/graphql](http://localhost:8000/graphql))
 
-Make sure you have Python 3, pip, and Redis installed.
-Then install the project dependencies:
+## Setup
+
+1. **Install dependencies**
 
 ```bash
 pip3 install -r requirements.txt
 ```
 
----
+Ensure the following are included in `requirements.txt`:
 
-## 2. Run Django Migrations
+```
+django-crontab
+celery
+django-celery-beat
+gql
+requests
+```
 
-Apply the database migrations:
+2. **Database Migrations**
 
 ```bash
 python3 manage.py migrate
 ```
 
----
+3. **Configure Cron Jobs**
 
-## 3. Schedule Cron Jobs
-
-### 3.1 Clean Inactive Customers
-
-* Cron job runs every Sunday at 2:00 AM.
-* Logs deleted customers to `/tmp/customer_cleanup_log.txt`.
-
-```bash
-# Example to add manually
-crontab crm/cron_jobs/customer_cleanup_crontab.txt
-```
-
-### 3.2 Order Reminders
-
-* Cron job runs daily at 8:00 AM.
-* Logs reminders to `/tmp/order_reminders_log.txt`.
-
-```bash
-crontab crm/cron_jobs/order_reminders_crontab.txt
-```
-
-### 3.3 Low Stock Products Update
-
-* Cron job runs every 12 hours.
-* Logs updated products to `/tmp/low_stock_updates_log.txt`.
-
----
-
-## 4. Celery Setup
-
-### 4.1 Install Celery and Beat
-
-```bash
-pip3 install celery django-celery-beat
-```
-
-Add `django_celery_beat` to `INSTALLED_APPS` in `crm/settings.py`.
-
----
-
-### 4.2 Configure Celery
-
-Create `crm/celery.py`:
+* **Customer Cleanup**: Runs every Sunday at 2:00 AM
 
 ```python
+('0 2 * * 0', 'crm.cron.clean_inactive_customers')
+```
+
+* **Order Reminders**: Runs daily at 8:00 AM
+
+```python
+('0 8 * * *', 'crm.cron.send_order_reminders')
+```
+
+* **Low Stock Update**: Runs every 12 hours
+
+```python
+('0 */12 * * *', 'crm.cron.update_low_stock')
+```
+
+4. **Configure Celery with Beat**
+
+* In `crm/settings.py`, add:
+
+```python
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+
+INSTALLED_APPS += [
+    'django_celery_beat',
+]
+
+CELERY_BEAT_SCHEDULE = {
+    'generate-crm-report': {
+        'task': 'crm.tasks.generate_crm_report',
+        'schedule': crontab(day_of_week='mon', hour=6, minute=0),
+    },
+}
+```
+
+* Initialize Celery in `crm/celery.py`:
+
+```python
+from __future__ import absolute_import, unicode_literals
 import os
 from celery import Celery
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'crm.settings')
-
 app = Celery('crm')
 app.config_from_object('django.conf:settings', namespace='CELERY')
 app.autodiscover_tasks()
 ```
 
-Update `crm/__init__.py`:
+* Load Celery app in `crm/__init__.py`:
 
 ```python
 from .celery import app as celery_app
 
-__all__ = ['celery_app']
+__all__ = ('celery_app',)
 ```
 
----
+5. **Running Services**
 
-### 4.3 Start Redis Server
-
-Make sure Redis is running:
+* Start Django server:
 
 ```bash
-sudo service redis-server start
+python3 manage.py runserver
 ```
 
----
-
-### 4.4 Run Celery Worker and Beat
-
-Start the Celery worker:
+* Start Celery worker:
 
 ```bash
 celery -A crm worker -l info
 ```
 
-Start Celery Beat:
+* Start Celery Beat scheduler:
 
 ```bash
 celery -A crm beat -l info
 ```
 
----
+6. **Verify Logs**
 
-### 4.5 Verify Logs
+* Customer cleanup: `/tmp/customer_cleanup_log.txt`
+* Order reminders: `/tmp/order_reminders_log.txt`
+* Heartbeat: `/tmp/crm_heartbeat_log.txt`
+* Low stock updates: `/tmp/low_stock_updates_log.txt`
+* Weekly CRM report: `/tmp/crm_report_log.txt`
 
-The weekly CRM report is logged to:
+7. **GraphQL Queries & Mutations**
 
-```
-/tmp/crm_report_log.txt
-```
+* `hello` query: Verifies the endpoint is alive.
+* `UpdateLowStockProducts` mutation: Updates products with stock < 10.
+* Custom queries for reports and customer/order filtering are available at `/graphql`.
 
-Format:
+## Notes
 
-```
-YYYY-MM-DD HH:MM:SS - Report: X customers, Y orders, Z revenue
-```
-
----
-
-## 5. Notes
-
-* Ensure the GraphQL endpoint `http://localhost:8000/graphql` is running before executing cron jobs or Celery tasks.
-* Check `/tmp` logs to confirm tasks are executed properly.
-* All cron jobs and Celery tasks are configured to run automatically based on
+* Ensure Redis is running locally for Celery.
+* Cron jobs rely on `django-crontab` to schedule tasks.
+* Logs are stored in `/tmp` for demonstration purposes; adjust paths in production.
+* GraphQL endpoint should be ac
