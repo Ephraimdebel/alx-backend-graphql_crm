@@ -101,3 +101,6 @@ xkit==0.0.0
 django-crontab
 gql
 requests
+celery
+django-celery-beat
+redis
