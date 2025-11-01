@@ -5,7 +5,7 @@ from django.db import transaction
 from django.core.exceptions import ValidationError
 from graphene_django.filter import DjangoFilterConnectionField
 from crm.filters import CustomerFilter, ProductFilter, OrderFilter
-
+from crm.models import Product 
 # Types
 class CustomerType(DjangoObjectType):
     class Meta:
