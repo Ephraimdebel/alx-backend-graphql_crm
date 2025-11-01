@@ -146,3 +146,30 @@ class Query(graphene.ObjectType):
     all_customers = DjangoFilterConnectionField(CustomerNode)
     all_products = DjangoFilterConnectionField(ProductNode)
     all_orders = DjangoFilterConnectionField(OrderNode)
+
+class UpdateLowStockProducts(graphene.Mutation):
+    class Arguments:
+        pass  # no input needed
+
+    message = graphene.String()
+    updated_products = graphene.List(graphene.String)
+
+    def mutate(self, info):
+        # Query low-stock products
+        low_stock = Product.objects.filter(stock__lt=10)
+
+        updated_names = []
+
+        for product in low_stock:
+            product.stock += 10  # simulate restocking
+            product.save()
+            updated_names.append(f"{product.name} (new stock: {product.stock})")
+
+        return UpdateLowStockProducts(
+            message="Low-stock products updated successfully!",
+            updated_products=updated_names
+        )
+
+
+class Mutation(graphene.ObjectType):
+    update_low_stock_products = UpdateLowStockProducts.Field()
