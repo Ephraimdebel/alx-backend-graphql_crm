@@ -1,139 +1,95 @@
-# CRM Project - Background Tasks and Reporting
+CRM Celery Setup Guide
 
-This project demonstrates the integration of background tasks, cron jobs, and GraphQL queries/mutations in a Django CRM application. It includes customer cleanup, order reminders, stock updates, and weekly CRM report generation using Celery.
+This guide explains how to configure and run Celery, Celery Beat, and Redis for the CRM application. It covers installation, configuration, running tasks, and verifying logs.
 
-## Requirements
+Install Redis and Dependencies
 
-* Python 3.12+
-* Django
-* django-crontab
-* celery
-* django-celery-beat
-* gql
-* Redis (for Celery broker)
-* GraphQL endpoint ([http://localhost:8000/graphql](http://localhost:8000/graphql))
+Install Redis:
 
-## Setup
+sudo apt update
+sudo apt install redis-server
+sudo systemctl start redis
+sudo systemctl enable redis
 
-1. **Install dependencies**
+Install Python packages:
 
-```bash
-pip3 install -r requirements.txt
-```
+pip install celery django-celery-beat redis
 
-Ensure the following are included in `requirements.txt`:
+Apply Django Migrations
 
-```
-django-crontab
-celery
-django-celery-beat
-gql
-requests
-```
+Run migrations:
 
-2. **Database Migrations**
+python manage.py migrate
 
-```bash
-python3 manage.py migrate
-```
+Start Celery Worker
 
-3. **Configure Cron Jobs**
+Start Celery worker from the folder containing manage.py:
 
-* **Customer Cleanup**: Runs every Sunday at 2:00 AM
-
-```python
-('0 2 * * 0', 'crm.cron.clean_inactive_customers')
-```
-
-* **Order Reminders**: Runs daily at 8:00 AM
-
-```python
-('0 8 * * *', 'crm.cron.send_order_reminders')
-```
-
-* **Low Stock Update**: Runs every 12 hours
-
-```python
-('0 */12 * * *', 'crm.cron.update_low_stock')
-```
-
-4. **Configure Celery with Beat**
-
-* In `crm/settings.py`, add:
-
-```python
-CELERY_BROKER_URL = 'redis://localhost:6379/0'
-
-INSTALLED_APPS += [
-    'django_celery_beat',
-]
-
-CELERY_BEAT_SCHEDULE = {
-    'generate-crm-report': {
-        'task': 'crm.tasks.generate_crm_report',
-        'schedule': crontab(day_of_week='mon', hour=6, minute=0),
-    },
-}
-```
-
-* Initialize Celery in `crm/celery.py`:
-
-```python
-from __future__ import absolute_import, unicode_literals
-import os
-from celery import Celery
-
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'crm.settings')
-app = Celery('crm')
-app.config_from_object('django.conf:settings', namespace='CELERY')
-app.autodiscover_tasks()
-```
-
-* Load Celery app in `crm/__init__.py`:
-
-```python
-from .celery import app as celery_app
-
-__all__ = ('celery_app',)
-```
-
-5. **Running Services**
-
-* Start Django server:
-
-```bash
-python3 manage.py runserver
-```
-
-* Start Celery worker:
-
-```bash
 celery -A crm worker -l info
-```
 
-* Start Celery Beat scheduler:
+Start Celery Beat Scheduler
 
-```bash
+Start celery beat in another terminal:
+
 celery -A crm beat -l info
-```
 
-6. **Verify Logs**
+Verify Celery Report Task Logging
 
-* Customer cleanup: `/tmp/customer_cleanup_log.txt`
-* Order reminders: `/tmp/order_reminders_log.txt`
-* Heartbeat: `/tmp/crm_heartbeat_log.txt`
-* Low stock updates: `/tmp/low_stock_updates_log.txt`
-* Weekly CRM report: `/tmp/crm_report_log.txt`
+After the task runs, check the log file:
 
-7. **GraphQL Queries & Mutations**
+/tmp/crm_report_log.txt
 
-* `hello` query: Verifies the endpoint is alive.
-* `UpdateLowStockProducts` mutation: Updates products with stock < 10.
-* Custom queries for reports and customer/order filtering are available at `/graphql`.
+Example log entry format:
 
-## Notes
+YYYY-MM-DD HH:MM:SS - Report: X customers, Y orders, Z revenue
 
-* Ensure Redis is running locally for Celery.
-* Cron jobs rely on `django-crontab` to schedule tasks.
-* Logs are stored in `/tmp` for demonstration purposes; adjust paths in production.
-* GraphQL endpoint should be ac
+Files Implemented in This Task
+
+crm/celery.py
+Initializes the Celery app with Redis as the broker.
+
+crm/tasks.py
+Contains the generate_crm_report Celery task that queries GraphQL and logs the CRM report.
+
+crm/settings.py
+Includes Celery configuration, Celery Beat schedule, and Redis broker setup.
+
+crm/init.py
+Ensures Celery app loads with Django.
+
+Running the Full System
+
+Start Django server:
+
+python manage.py runserver
+
+Start Redis:
+
+redis-server
+
+Start Celery worker:
+
+celery -A crm worker -l info
+
+Start Celery beat:
+
+celery -A crm beat -l info
+
+Expected Behavior
+
+Celery Beat triggers generate_crm_report every Monday at 6:00 AM.
+
+The task uses a GraphQL query to fetch:
+
+Total customers
+
+Total orders
+
+Total revenue
+
+It writes the report to:
+
+/tmp/crm_report_log.txt
+
+Place this file inside:
+crm/README.md
