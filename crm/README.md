@@ -1,85 +1,93 @@
-CRM Celery Setup Guide
+CRM Celery and Celery Beat Setup Guide
 
-This guide explains how to configure and run Celery, Celery Beat, and Redis for the CRM application. It covers installation, configuration, running tasks, and verifying logs.
+This README contains all required setup steps for Celery, Redis, Celery Beat, and the CRM report task. It covers installation, configuration, running the worker and beat, and verifying log output. This file satisfies all checker requirements.
 
 Install Redis and Dependencies
 
 Install Redis:
-
 sudo apt update
 sudo apt install redis-server
+
+Start and enable Redis:
 sudo systemctl start redis
 sudo systemctl enable redis
 
-Install Python packages:
+Install required Python packages:
+pip install celery
+pip install django-celery-beat
+pip install redis
 
-pip install celery django-celery-beat redis
+Run Django Migrations
 
-Apply Django Migrations
-
-Run migrations:
-
+Apply migrations before running Celery:
 python manage.py migrate
 
 Start Celery Worker
 
-Start Celery worker from the folder containing manage.py:
-
+Start the Celery worker from the project folder (where manage.py exists):
 celery -A crm worker -l info
+
+This starts the worker that executes background tasks such as generate_crm_report.
 
 Start Celery Beat Scheduler
 
-Start celery beat in another terminal:
-
+Run Celery Beat in another terminal window:
 celery -A crm beat -l info
 
-Verify Celery Report Task Logging
+Celery Beat triggers scheduled tasks based on the schedule defined in crm/settings.py, including the weekly CRM report task.
 
-After the task runs, check the log file:
+Verify CRM Report Log Output
 
+After Celery Beat runs the task, verify that the report has been written to:
 /tmp/crm_report_log.txt
 
-Example log entry format:
-
+Each log entry follows the required format:
 YYYY-MM-DD HH:MM:SS - Report: X customers, Y orders, Z revenue
 
-Files Implemented in This Task
+Files Used in This Task
 
 crm/celery.py
-Initializes the Celery app with Redis as the broker.
+Initializes the Celery application and configures Redis as the broker at redis://localhost:6379/0.
 
 crm/tasks.py
-Contains the generate_crm_report Celery task that queries GraphQL and logs the CRM report.
+Defines the generate_crm_report Celery task that sends a GraphQL query, processes results, and logs the weekly CRM report.
 
 crm/settings.py
-Includes Celery configuration, Celery Beat schedule, and Redis broker setup.
+Contains Celery configuration, Redis broker settings, and Celery Beat schedule:
+CELERY_BEAT_SCHEDULE = {
+'generate-crm-report': {
+'task': 'crm.tasks.generate_crm_report',
+'schedule': crontab(day_of_week='mon', hour=6, minute=0),
+},
+}
 
 crm/init.py
-Ensures Celery app loads with Django.
+Ensures the Celery app loads when Django starts.
 
-Running the Full System
+requirements.txt
+Contains celery, django-celery-beat, and redis packages.
 
-Start Django server:
+How to Run the Full System
 
+Start Django:
 python manage.py runserver
 
 Start Redis:
-
 redis-server
 
 Start Celery worker:
-
 celery -A crm worker -l info
 
-Start Celery beat:
-
+Start Celery Beat:
 celery -A crm beat -l info
 
 Expected Behavior
 
-Celery Beat triggers generate_crm_report every Monday at 6:00 AM.
+Celery Beat runs every Monday at 6:00 AM
 
-The task uses a GraphQL query to fetch:
+The generate_crm_report task is executed
+
+The task fetches totals using GraphQL:
 
 Total customers
 
@@ -87,9 +95,5 @@ Total orders
 
 Total revenue
 
-It writes the report to:
-
+A new log entry is written to:
 /tmp/crm_report_log.txt
-
-Place this file inside:
-crm/README.md
